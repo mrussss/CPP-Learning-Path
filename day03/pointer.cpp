@@ -1,10 +1,14 @@
 #include <iostream>
 
-#define LOG(x) std::cout << x << std::endl
-
 int main()
 {
     int var = 8;
-    void *ptr = &var;
+    std::cout << "var的值:" << var << std::endl;
+    std::cout << "var的地址:" << &var << std::endl;
+    void *ptr = nullptr;
+    ptr = &var;
+    int *p = &var;
+    *p = 10;
+    std::cout << "修改后var的值:" << var << std::endl;
     std::cin.get();
 }
