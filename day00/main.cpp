@@ -12,7 +12,7 @@ int main()
     // 这里试图访问下标 3，这是未定义行为 (UB)
     for (int i = 0; i <= 3; ++i)
     {
-        std::cout << "Index " << i << " = " << data[i] << std::endl;
+        std::cout << "Index " << i << " = " << data.at(i) << std::endl;
     }
 
     std::cout << "Environment Check: END" << std::endl;
