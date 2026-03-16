@@ -2,3 +2,5 @@ app
 *.o
 *.exe
 *.out
+build/
+.vscode/
