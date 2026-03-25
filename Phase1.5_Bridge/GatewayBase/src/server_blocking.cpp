@@ -4,6 +4,8 @@
 #include <netinet/in.h>
 #include <string.h>
 #include <unistd.h>
+#include "Logger.hpp"
+#include <arpa/inet.h>
 int main()
 {
     struct sockaddr_in server_addr;
@@ -30,8 +32,23 @@ int main()
         perror("listen failed");
         exit(1);
     }
-    while (true)
+    struct sockaddr_in client_addr;
+    socklen_t addr_len = sizeof(client_addr);
+
+    int conn_fd = accept(listen_fd, (struct sockaddr *)&client_addr, &addr_len);
+    if (conn_fd == -1)
     {
-        sleep(1);
+        perror("accept failed");
     }
+    char *client_ip = inet_ntoa(client_addr.sin_addr);
+    LOG_INFO("收到连接%s,fd =%d ", client_ip, conn_fd);
+    char buffer[1024];
+    int bytes_read = recv(conn_fd, buffer, 1024, 0);
+    if (bytes_read > 0)
+    {
+        buffer[bytes_read] = '\0';
+        LOG_INFO("%s", buffer);
+        send(conn_fd, buffer, bytes_read, 0);
+        }
+    close(conn_fd);
 }
