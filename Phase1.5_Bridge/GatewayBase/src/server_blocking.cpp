@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include "Logger.hpp"
 #include <arpa/inet.h>
+#include <iostream>
 int main()
 {
     struct sockaddr_in server_addr;
@@ -20,6 +21,16 @@ int main()
         perror("socket failed");
         exit(1);
     }
+
+    int opt = 1;
+    if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+    {
+
+        LOG_INFO("[错误] 致命:setsockopt(SO_REUSEADDR) 失败！端口可能仍处于锁定状态。");
+        exit(EXIT_FAILURE);
+    }
+    LOG_INFO("[信息] SO_REUSEADDR 特权授予成功，端口复用已开启。");
+
     int bind_return = bind(listen_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
     if (bind_return == -1)
     {
@@ -43,12 +54,26 @@ int main()
     char *client_ip = inet_ntoa(client_addr.sin_addr);
     LOG_INFO("收到连接%s,fd =%d ", client_ip, conn_fd);
     char buffer[1024];
-    int bytes_read = recv(conn_fd, buffer, 1024, 0);
-    if (bytes_read > 0)
+    while (true)
     {
-        buffer[bytes_read] = '\0';
-        LOG_INFO("%s", buffer);
-        send(conn_fd, buffer, bytes_read, 0);
+        int bytes_read = recv(conn_fd, buffer, sizeof(buffer) - 1, 0);
+        if (bytes_read > 0)
+        {
+            buffer[bytes_read] = '\0';
+            LOG_INFO("收到数据: %s", buffer);
+            send(conn_fd, buffer, bytes_read, 0);
         }
+        else if (bytes_read == 0)
+        {
+            LOG_INFO("客户端主动断开了连接");
+            break;
+        }
+        else
+        {
+            perror("recv failed");
+            break;
+        }
+    }
     close(conn_fd);
+    return 0;
 }
