@@ -1,0 +1,120 @@
+#include <sys/socket.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <netinet/in.h>
+#include <string.h>
+#include <unistd.h>
+#include "Logger.hpp"
+#include <arpa/inet.h>
+#include <iostream>
+#include <fcntl.h>
+#include <sys/epoll.h>
+#include <cerrno>
+#include <cstring>
+void setNonBlocking(int fd)
+{
+    int flags = fcntl(fd, F_GETFL, 0);
+    flags |= O_NONBLOCK;
+    fcntl(fd, F_SETFL, flags);
+}
+
+int main()
+{
+    struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_port = htons(8080);
+
+    int listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+
+    if (listen_fd == -1)
+    {
+        perror("socket failed");
+        exit(1);
+    }
+
+    int opt = 1;
+    if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+    {
+        LOG_INFO("[错误] 致命:setsockopt(SO_REUSEADDR) 失败！端口可能仍处于锁定状态。");
+        exit(EXIT_FAILURE);
+    }
+    LOG_INFO("[信息] SO_REUSEADDR 特权授予成功，端口复用已开启。");
+
+    int bind_return = bind(listen_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+    if (bind_return == -1)
+    {
+        perror("bind failed");
+        exit(1);
+    }
+    int listen_retuen = listen(listen_fd, 10);
+    if (listen_retuen == -1)
+    {
+        perror("listen failed");
+        exit(1);
+    }
+    setNonBlocking(listen_fd);
+
+    int epfd = epoll_create1(0);
+    if (epfd == -1)
+    {
+        perror("epoll_creael failed");
+        exit(EXIT_FAILURE);
+    }
+    struct epoll_event event = {0};
+    event.events = EPOLLIN | EPOLLET;
+    event.data.fd = listen_fd;
+    if (epoll_ctl(epfd, EPOLL_CTL_ADD, listen_fd, &event) == -1)
+    {
+        perror("epoll_ctl:listen_fd add failed");
+        close(epfd);
+        exit(EXIT_FAILURE);
+    }
+    LOG_INFO("Success: listen_fd successfully mounted to epoll instance with EPOLLET.");
+    epoll_event events[1024];
+    struct sockaddr_in client_addr;
+    socklen_t addr_len = sizeof(client_addr);
+    int conn_fd = 0;
+    while (true)
+    {
+        int nfds = epoll_wait(epfd, events, 1024, -1);
+        for (int i = 0; i < nfds; i++)
+        {
+            int curr_fd = events[i].data.fd;
+            if (curr_fd == listen_fd)
+            {
+                while (true)
+                {
+                    conn_fd = accept(listen_fd, (struct sockaddr *)&client_addr, &addr_len);
+                    if (conn_fd == -1)
+                    {
+                        if (errno == EAGAIN || errno == EWOULDBLOCK)
+                        {
+                            break;
+                        }
+                        else
+                        {
+                            perror("accept error");
+                            break;
+                        }
+                    }
+                    setNonBlocking(conn_fd);
+                    struct epoll_event event1 = {0};
+                    event1.events = EPOLLIN | EPOLLET;
+                    event1.data.fd = conn_fd;
+                    if (epoll_ctl(epfd, EPOLL_CTL_ADD, conn_fd, &event1) == -1)
+                    {
+                        perror("epoll_ctl:conn_fd add failed");
+                        close(epfd);
+                        exit(EXIT_FAILURE);
+                    }
+                    LOG_INFO("New connection: fd=%d", conn_fd);
+                }
+            }
+            else
+            {
+            }
+        }
+    }
+}
