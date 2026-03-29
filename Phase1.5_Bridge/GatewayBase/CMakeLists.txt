@@ -7,3 +7,5 @@ add_executable(server_out src/server_epoll.cpp)
 
 # 3. 厂长指令：告诉编译器去 include 文件夹里找头文件
 target_include_directories(server_out PUBLIC include)
+target_compile_options(server_out PRIVATE -O0 -g -fsanitize=address)
+target_link_libraries(server_out PRIVATE -fsanitize=address)

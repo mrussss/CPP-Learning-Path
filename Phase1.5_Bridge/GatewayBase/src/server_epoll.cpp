@@ -11,6 +11,8 @@
 #include <sys/epoll.h>
 #include <cerrno>
 #include <cstring>
+#include <unordered_map>
+#include "Connection.hpp"
 void setNonBlocking(int fd)
 {
     int flags = fcntl(fd, F_GETFL, 0);
@@ -76,6 +78,8 @@ int main()
     struct sockaddr_in client_addr;
     socklen_t addr_len = sizeof(client_addr);
     int conn_fd = 0;
+    std::unordered_map<int, Connection> connections;
+
     while (true)
     {
         int nfds = epoll_wait(epfd, events, 1024, -1);
@@ -110,10 +114,49 @@ int main()
                         exit(EXIT_FAILURE);
                     }
                     LOG_INFO("New connection: fd=%d", conn_fd);
+                    connections.emplace(conn_fd, conn_fd);
                 }
             }
             else
             {
+                auto it = connections.find(curr_fd);
+                if (it == connections.end())
+                    continue;
+                Connection &conn = it->second;
+                while (true)
+                {
+                    char buf[4096];
+                    memset(buf, 0, sizeof(buf));
+                    ssize_t bytes_read = recv(curr_fd, buf, sizeof(buf), 0);
+                    if (bytes_read > 0)
+                    {
+                        conn.input_buffer.append(buf, bytes_read);
+                        LOG_INFO("fd=%d received %zd bytes", curr_fd, bytes_read);
+                    }
+                    else if (bytes_read == 0)
+                    {
+                        LOG_INFO("Client disconnected: fd=%d, cleaning up...", curr_fd);
+                        epoll_ctl(epfd, EPOLL_CTL_DEL, curr_fd, nullptr);
+                        close(curr_fd);
+                        connections.erase(curr_fd);
+                        break;
+                    }
+                    else
+                    {
+                        if (errno == EAGAIN || errno == EWOULDBLOCK)
+                        {
+                            break;
+                        }
+                        else
+                        {
+                            perror("recv error");
+                            epoll_ctl(epfd, EPOLL_CTL_DEL, curr_fd, nullptr);
+                            close(curr_fd);
+                            connections.erase(curr_fd);
+                            break;
+                        }
+                    }
+                }
             }
         }
     }
