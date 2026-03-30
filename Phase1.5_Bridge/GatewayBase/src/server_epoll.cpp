@@ -14,7 +14,7 @@
 #include <unordered_map>
 #include "Connection.hpp"
 
-constexpr uint32_t MAX_PAYLOAD_SIZE = 4 * 1024 * 1024;
+// constexpr uint32_t MAX_PAYLOAD_SIZE = 4 * 1024 * 1024;
 void setNonBlocking(int fd)
 {
     int flags = fcntl(fd, F_GETFL, 0);
@@ -137,6 +137,7 @@ int main()
                     }
                     else if (bytes_read == 0)
                     {
+                        conn.parse();
                         LOG_INFO("Client disconnected: fd=%d, cleaning up...", curr_fd);
                         epoll_ctl(epfd, EPOLL_CTL_DEL, curr_fd, nullptr);
                         close(curr_fd);
@@ -147,24 +148,14 @@ int main()
                     {
                         if (errno == EAGAIN || errno == EWOULDBLOCK)
                         {
-                            if (conn.input_buffer.size() < 4)
+                            int ret = conn.parse();
+                            if (ret == -1)
                             {
-                                LOG_INFO("fd=%d 仅缓冲 %zu 字节，不足包头，等下次 epoll", curr_fd, conn.input_buffer.size());
-                                break;
-                            }
-                            uint32_t network_len = 0;
-                            std::memcpy(&network_len, conn.input_buffer.data(), sizeof(uint32_t));
-                            uint32_t host_len = ntohl(network_len);
-                            LOG_INFO("fd=%d 解析出 Payload 长度为: %u 字节", curr_fd, host_len);
-                            if (host_len > MAX_PAYLOAD_SIZE)
-                            {
-                                LOG_ERROR("fd=%d 报文长度异常 (%u bytes)，触发 OOM 熔断，强杀连接！", curr_fd, host_len);
+                                LOG_ERROR("fd=%d 触发防御熔断，物理拔线！", curr_fd);
                                 epoll_ctl(epfd, EPOLL_CTL_DEL, curr_fd, nullptr);
                                 close(curr_fd);
                                 connections.erase(curr_fd);
-                                break;
                             }
-                            LOG_INFO("fd=%d 准备接收 %u 字节的 Payload", curr_fd, host_len);
                             break;
                         }
                         else
