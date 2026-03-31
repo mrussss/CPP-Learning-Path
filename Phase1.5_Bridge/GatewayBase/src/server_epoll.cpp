@@ -11,10 +11,16 @@
 #include <sys/epoll.h>
 #include <cerrno>
 #include <cstring>
+#include <csignal>
 #include <unordered_map>
 #include "Connection.hpp"
+#include "BlockQueue.hpp"
 
-// constexpr uint32_t MAX_PAYLOAD_SIZE = 4 * 1024 * 1024;
+volatile sig_atomic_t g_running = 1;
+void sigint_handler(int sig)
+{
+    g_running = 0;
+}
 void setNonBlocking(int fd)
 {
     int flags = fcntl(fd, F_GETFL, 0);
@@ -24,6 +30,12 @@ void setNonBlocking(int fd)
 
 int main()
 {
+    BlockQueue<std::string> task_queue;
+    if (std::signal(SIGINT, sigint_handler) == SIG_ERR)
+    {
+        std::cerr << "signal 注册失败" << std::endl;
+    }
+    std::cout << "C++ 程序：按 Ctrl+C 退出" << std::endl;
     struct sockaddr_in server_addr;
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
@@ -82,9 +94,18 @@ int main()
     int conn_fd = 0;
     std::unordered_map<int, Connection> connections;
 
-    while (true)
+    while (g_running)
     {
-        int nfds = epoll_wait(epfd, events, 1024, -1);
+        int nfds = epoll_wait(epfd, events, 1024, 1000);
+        if (nfds == -1)
+        {
+            if (errno == EINTR)
+            {
+                continue;
+            }
+            perror("epoll_wait error");
+            break;
+        }
         for (int i = 0; i < nfds; i++)
         {
             int curr_fd = events[i].data.fd;
@@ -171,4 +192,16 @@ int main()
             }
         }
     }
+    LOG_INFO("捕获中止信号，准备执行全链路大扫除...");
+    for (auto &[fd, conn] : connections)
+    {
+        LOG_INFO("正在关闭存活的客户端 fd=%d...", fd);
+        close(fd);
+    }
+    close(listen_fd);
+    close(epfd);
+    task_queue.stop();
+    LOG_INFO("触发内部队列 stop,生命周期闭环完成");
+
+    return 0;
 }
