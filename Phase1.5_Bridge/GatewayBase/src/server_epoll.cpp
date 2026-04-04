@@ -92,8 +92,19 @@ int main()
     struct sockaddr_in client_addr;
     socklen_t addr_len = sizeof(client_addr);
     int conn_fd = 0;
-    std::unordered_map<int, Connection> connections;
 
+    std::unordered_map<int, Connection> connections;
+    std::thread worker([&task_queue]()
+                       {
+while(g_running){
+    std::string item;
+    bool ok = task_queue.pop(item);
+    if (!ok)
+    {
+        break;
+    }
+    LOG_INFO("Worker 收到解包数据: %s", item.c_str());
+} });
     while (g_running)
     {
         int nfds = epoll_wait(epfd, events, 1024, 1000);
@@ -137,7 +148,7 @@ int main()
                         exit(EXIT_FAILURE);
                     }
                     LOG_INFO("New connection: fd=%d", conn_fd);
-                    connections.emplace(conn_fd, conn_fd);
+                    connections.insert({conn_fd, Connection(conn_fd, &task_queue)});
                 }
             }
             else
@@ -202,6 +213,7 @@ int main()
     close(epfd);
     task_queue.stop();
     LOG_INFO("触发内部队列 stop,生命周期闭环完成");
-
+    worker.join();
+    LOG_INFO("Worker线程已彻底安全销毁,系统完美退出。");
     return 0;
 }

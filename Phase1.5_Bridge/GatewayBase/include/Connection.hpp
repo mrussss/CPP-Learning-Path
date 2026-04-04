@@ -1,12 +1,14 @@
 #pragma once
 #include <string>
+#include "BlockQueue.hpp"
 
 constexpr uint32_t MAX_PAYLOAD_SIZE = 4 * 1024 * 1024;
 struct Connection
 {
     int fd;
     std::string input_buffer;
-    Connection(int fd_) : fd(fd_), input_buffer("") {}
+    BlockQueue<std::string> *task_queue_ptr;
+    Connection(int fd_, BlockQueue<std::string> *q) : fd(fd_), input_buffer(""), task_queue_ptr(q) {}
     int parse()
     {
         LOG_INFO("进入专属 parse,当前 buffer size = %zu", input_buffer.size());
@@ -41,6 +43,10 @@ struct Connection
             std::string payload(input_buffer.data() + read_index + 4, host_len);
             LOG_INFO("成功切出一个完整包,Payload 长度: %u, 内容: %s", host_len, payload.c_str());
             read_index += (4 + host_len);
+            if (task_queue_ptr != nullptr)
+            {
+                task_queue_ptr->push(payload);
+            }
         }
         if (read_index > 0)
         {
