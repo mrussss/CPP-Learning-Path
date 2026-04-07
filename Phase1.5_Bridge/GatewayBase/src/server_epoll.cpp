@@ -13,6 +13,9 @@
 #include <cstring>
 #include <csignal>
 #include <unordered_map>
+#include <thread>
+#include <vector>
+#include <algorithm>
 #include "Connection.hpp"
 #include "BlockQueue.hpp"
 
@@ -94,17 +97,47 @@ int main()
     int conn_fd = 0;
 
     std::unordered_map<int, Connection> connections;
-    std::thread worker([&task_queue]()
-                       {
-while(g_running){
-    std::string item;
-    bool ok = task_queue.pop(item);
-    if (!ok)
+
+    unsigned int hw_cores = std::thread::hardware_concurrency();
+    if (hw_cores == 0)
     {
-        break;
+        hw_cores = 4;
     }
-    LOG_INFO("Worker 收到解包数据: %s", item.c_str());
-} });
+
+    unsigned int worker_count = std::min(hw_cores, 4u);
+    LOG_INFO("系统检测到 %u 个核心，准备拉起 %u 个 Worker 线程...", hw_cores, worker_count);
+    std::vector<std::thread> workers;
+    for (unsigned i = 0; i < worker_count; ++i)
+    {
+        workers.emplace_back([&task_queue, worker_id = i]()
+                             {
+                                 while (true)
+                                 {
+                                     std::string item;
+                                     bool ok = task_queue.pop(item);
+                                     if (!ok)
+                                     {
+                                        LOG_INFO("Worker %u 收到队列关闭信号，优雅退出。",worker_id);
+                                         break;
+                                     }
+                                     LOG_INFO("Worker %u 收到解包数据: %s",worker_id, item.c_str());
+                                 } });
+    }
+
+    //  std::thread worker([&task_queue]()
+    // {
+
+    //     while (g_running)
+    //     {
+    //         std::string item;
+    //         bool ok = task_queue.pop(item);
+    //         if (!ok)
+    //         {
+    //             break;
+    //         }
+    //         LOG_INFO("Worker 收到解包数据: %s", item.c_str());
+    //     }
+    // });
     while (g_running)
     {
         int nfds = epoll_wait(epfd, events, 1024, 1000);
@@ -212,8 +245,16 @@ while(g_running){
     close(listen_fd);
     close(epfd);
     task_queue.stop();
-    LOG_INFO("触发内部队列 stop,生命周期闭环完成");
-    worker.join();
-    LOG_INFO("Worker线程已彻底安全销毁,系统完美退出。");
+    LOG_INFO("触发内部队列 stop,等待所有Worker撤退");
+
+    for (auto &w : workers)
+    {
+        if (w.joinable())
+        {
+            w.join();
+        }
+    }
+
+    LOG_INFO("Worker军团已彻底安全销毁,系统完美退出。");
     return 0;
 }
