@@ -120,24 +120,10 @@ int main()
                                         LOG_INFO("Worker %u 收到队列关闭信号，优雅退出。",worker_id);
                                          break;
                                      }
-                                     LOG_INFO("Worker %u 收到解包数据: %s",worker_id, item.c_str());
+                                     //LOG_INFO("Worker %u 收到解包数据: %s",worker_id, item.c_str());
                                  } });
     }
 
-    //  std::thread worker([&task_queue]()
-    // {
-
-    //     while (g_running)
-    //     {
-    //         std::string item;
-    //         bool ok = task_queue.pop(item);
-    //         if (!ok)
-    //         {
-    //             break;
-    //         }
-    //         LOG_INFO("Worker 收到解包数据: %s", item.c_str());
-    //     }
-    // });
     while (g_running)
     {
         int nfds = epoll_wait(epfd, events, 1024, 1000);
@@ -198,7 +184,7 @@ int main()
                     if (bytes_read > 0)
                     {
                         conn.input_buffer.append(buf, bytes_read);
-                        LOG_INFO("fd=%d received %zd bytes", curr_fd, bytes_read);
+                        // LOG_INFO("fd=%d received %zd bytes", curr_fd, bytes_read);
                     }
                     else if (bytes_read == 0)
                     {

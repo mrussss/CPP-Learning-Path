@@ -70,6 +70,22 @@ def test_5_connect_and_drop():
     s.close()
     time.sleep(0.1)
 
+def test_6_evil_half_close():
+    print("\n--- 场景 6: 终极恶心切断 (半包数据 + 瞬间闪断) ---")
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((HOST, PORT))
+    msg = "This payload will never reach the end."
+    encoded_msg = msg.encode()
+    
+    # 将 4 字节头部和一半的 Payload 拼在一起发过去
+    half_data = struct.pack('!I', len(encoded_msg)) + encoded_msg[:len(encoded_msg)//2]
+    s.sendall(half_data)
+    print("  -> 🔫 已发送 4 Bytes 头部和一半的 Payload，立刻拔线 (close)！")
+    
+    # 瞬间断开连接，此时服务端的 read_buffer 里还留着残缺的数据
+    s.close()
+    time.sleep(0.1)
+
 if __name__ == "__main__":
     print("🚀 末日测试自动化脚本启动！")
     time.sleep(1)
@@ -87,5 +103,8 @@ if __name__ == "__main__":
     time.sleep(0.5)
     
     test_5_connect_and_drop()
+    time.sleep(0.5)
+
+    test_6_evil_half_close()
     
-    print("\n🏁 所有 5 大极限场景轰炸完毕！")
+    print("\n🏁 所有 6 大极限场景轰炸完毕！")

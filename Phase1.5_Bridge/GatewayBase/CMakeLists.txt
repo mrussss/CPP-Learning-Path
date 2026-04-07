@@ -10,6 +10,11 @@ add_executable(server_out src/server_epoll.cpp)
 
 # 3. 头文件、编译、链接配置
 target_include_directories(server_out PUBLIC include)
-target_compile_options(server_out PRIVATE -O0 -g -fsanitize=address)
-# ✅ 第二步：链接 CMake 封装的跨平台线程目标 Threads::Threads
-target_link_libraries(server_out PRIVATE -fsanitize=address Threads::Threads)
+
+target_compile_options(server_out PRIVATE -O0 -g -fsanitize=address )
+
+# 链接选项上膛：必须同步注入 ASan (严格分离)
+ target_link_options(server_out PRIVATE -fsanitize=address)
+
+# 第二步：链接 CMake 封装的跨平台线程目标
+target_link_libraries(server_out PRIVATE Threads::Threads)
