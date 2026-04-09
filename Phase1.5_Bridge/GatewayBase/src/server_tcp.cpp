@@ -120,7 +120,7 @@ int main()
                                         LOG_INFO("Worker %u 收到队列关闭信号，优雅退出。",worker_id);
                                          break;
                                      }
-                                     //LOG_INFO("Worker %u 收到解包数据: %s",worker_id, item.c_str());
+                                     LOG_INFO("Worker %u 收到解包数据: %s",worker_id, item.c_str());
                                  } });
     }
 
@@ -184,7 +184,7 @@ int main()
                     if (bytes_read > 0)
                     {
                         conn.input_buffer.append(buf, bytes_read);
-                        // LOG_INFO("fd=%d received %zd bytes", curr_fd, bytes_read);
+                        LOG_INFO("fd=%d received %zd bytes", curr_fd, bytes_read);
                     }
                     else if (bytes_read == 0)
                     {

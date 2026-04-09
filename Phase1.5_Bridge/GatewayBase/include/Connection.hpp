@@ -13,9 +13,6 @@ struct Connection
     {
         // LOG_INFO("进入专属 parse,当前 buffer size = %zu", input_buffer.size());
         size_t read_index = 0;
-        // 单元三专用：压测旁路逻辑
-        input_buffer.clear();
-        return 0;
 
         while (true)
         {
